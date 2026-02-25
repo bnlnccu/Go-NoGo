@@ -78,6 +78,8 @@ public class GoNoGoManager : MonoBehaviour
 
     [SerializeField] private Button startButton;
     [SerializeField] private Button restartButton;
+    [SerializeField] private Button quitButtonStart;
+    [SerializeField] private Button quitButtonResult;
 
     [SerializeField] private MoleSpawner moleSpawner;
 
@@ -123,6 +125,10 @@ public class GoNoGoManager : MonoBehaviour
             startButton.onClick.AddListener(StartGame);
         if (restartButton != null)
             restartButton.onClick.AddListener(RestartGame);
+        if (quitButtonStart != null)
+            quitButtonStart.onClick.AddListener(QuitGame);
+        if (quitButtonResult != null)
+            quitButtonResult.onClick.AddListener(QuitGame);
 
         // 初始化生成器
         if (moleSpawner != null)
@@ -160,6 +166,15 @@ public class GoNoGoManager : MonoBehaviour
     public void RestartGame()
     {
         StartGame();
+    }
+
+    public void QuitGame()
+    {
+#if UNITY_EDITOR
+        UnityEditor.EditorApplication.isPlaying = false;
+#else
+        Application.Quit();
+#endif
     }
 
     private void EndGame()

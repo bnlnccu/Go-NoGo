@@ -95,9 +95,22 @@ public static class SceneBuilder
             24, TEXT_WHITE, TextAnchor.MiddleCenter);
         SetLayoutElement(instrText, 180);
 
+        // 按鈕列（水平並排）
+        var startBtnRow = CreateUIElement("ButtonRow", startContent.transform);
+        var startBtnRowLayout = startBtnRow.AddComponent<HorizontalLayoutGroup>();
+        startBtnRowLayout.spacing = 20;
+        startBtnRowLayout.childAlignment = TextAnchor.MiddleCenter;
+        startBtnRowLayout.childForceExpandWidth = true;
+        startBtnRowLayout.childForceExpandHeight = true;
+        startBtnRowLayout.childControlWidth = true;
+        startBtnRowLayout.childControlHeight = true;
+        SetLayoutElement(startBtnRow, 60);
+
         // 開始按鈕
-        var startBtn = CreateButton("StartButton", startContent.transform, "開始遊戲", 32, BUTTON_COLOR);
-        SetLayoutElement(startBtn, 60);
+        var startBtn = CreateButton("StartButton", startBtnRow.transform, "開始遊戲", 32, BUTTON_COLOR);
+
+        // 結束按鈕
+        var quitBtnStart = CreateButton("QuitButtonStart", startBtnRow.transform, "結束遊戲", 32, new Color(0.6f, 0.25f, 0.25f));
 
         // ===== Game Panel =====
         var gamePanel = CreateUIElement("GamePanel", canvasGO.transform);
@@ -203,9 +216,22 @@ public static class SceneBuilder
         var spacer = CreateUIElement("Spacer", resultContent.transform);
         SetLayoutElement(spacer, 20);
 
+        // 按鈕列（水平並排）
+        var resultBtnRow = CreateUIElement("ButtonRow", resultContent.transform);
+        var resultBtnRowLayout = resultBtnRow.AddComponent<HorizontalLayoutGroup>();
+        resultBtnRowLayout.spacing = 20;
+        resultBtnRowLayout.childAlignment = TextAnchor.MiddleCenter;
+        resultBtnRowLayout.childForceExpandWidth = true;
+        resultBtnRowLayout.childForceExpandHeight = true;
+        resultBtnRowLayout.childControlWidth = true;
+        resultBtnRowLayout.childControlHeight = true;
+        SetLayoutElement(resultBtnRow, 55);
+
         // 重新開始按鈕
-        var restartBtn = CreateButton("RestartButton", resultContent.transform, "再玩一次", 30, BUTTON_RESULT);
-        SetLayoutElement(restartBtn, 55);
+        var restartBtn = CreateButton("RestartButton", resultBtnRow.transform, "再玩一次", 30, BUTTON_RESULT);
+
+        // 結束按鈕
+        var quitBtnResult = CreateButton("QuitButtonResult", resultBtnRow.transform, "結束遊戲", 30, new Color(0.6f, 0.25f, 0.25f));
 
 
         // ===== 建立管理器物件 =====
@@ -230,6 +256,8 @@ public static class SceneBuilder
         managerSO.FindProperty("resultAvgRTText").objectReferenceValue = avgRTText.GetComponent<Text>();
         managerSO.FindProperty("startButton").objectReferenceValue = startBtn.GetComponent<Button>();
         managerSO.FindProperty("restartButton").objectReferenceValue = restartBtn.GetComponent<Button>();
+        managerSO.FindProperty("quitButtonStart").objectReferenceValue = quitBtnStart.GetComponent<Button>();
+        managerSO.FindProperty("quitButtonResult").objectReferenceValue = quitBtnResult.GetComponent<Button>();
         managerSO.FindProperty("moleSpawner").objectReferenceValue = spawner;
 
         // 設定預設 Sprite
