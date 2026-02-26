@@ -116,25 +116,28 @@ public static class SceneBuilder
         var gamePanel = CreateUIElement("GamePanel", canvasGO.transform);
         StretchFull(gamePanel);
 
-        // 頂部資訊列
-        var topBar = CreateUIElement("TopBar", gamePanel.transform);
-        SetAnchored(topBar, new Vector2(0, 1), new Vector2(1, 1), new Vector2(0, -10), new Vector2(0, 60));
-        topBar.GetComponent<RectTransform>().anchoredPosition = new Vector2(0, -40);
-        var topBarLayout = topBar.AddComponent<HorizontalLayoutGroup>();
-        topBarLayout.spacing = 50;
-        topBarLayout.childAlignment = TextAnchor.MiddleCenter;
-        topBarLayout.childForceExpandWidth = true;
-        topBarLayout.childForceExpandHeight = true;
-        topBarLayout.padding = new RectOffset(30, 30, 5, 5);
+        // 底部資訊列（移至畫面下方，放大字體讓玩家一眼看到）
+        var bottomBar = CreateUIElement("BottomBar", gamePanel.transform);
+        SetAnchored(bottomBar, new Vector2(0, 0), new Vector2(1, 0), new Vector2(0, 45), new Vector2(0, 90));
+        var bottomBarLayout = bottomBar.AddComponent<HorizontalLayoutGroup>();
+        bottomBarLayout.spacing = 40;
+        bottomBarLayout.childAlignment = TextAnchor.MiddleCenter;
+        bottomBarLayout.childForceExpandWidth = true;
+        bottomBarLayout.childForceExpandHeight = true;
+        bottomBarLayout.padding = new RectOffset(50, 50, 8, 8);
 
         // 背景色
-        var topBarBg = topBar.AddComponent<Image>();
-        topBarBg.color = new Color(0, 0, 0, 0.5f);
+        var bottomBarBg = bottomBar.AddComponent<Image>();
+        bottomBarBg.color = new Color(0, 0, 0, 0.65f);
 
-        // 分數文字
-        var scoreText = CreateText("ScoreText", topBar.transform, "分數：0", 28, TEXT_WHITE, TextAnchor.MiddleLeft);
+        // 分數文字（大字、黃色、粗體）
+        var scoreText = CreateText("ScoreText", bottomBar.transform, "分數：0", 42, TEXT_YELLOW, TextAnchor.MiddleLeft);
+        var scoreTextComp = scoreText.GetComponent<Text>();
+        scoreTextComp.fontStyle = FontStyle.Bold;
+        scoreTextComp.horizontalOverflow = HorizontalWrapMode.Overflow;
         // 試驗文字
-        var trialText = CreateText("TrialText", topBar.transform, "第 0 / 30 隻", 28, TEXT_WHITE, TextAnchor.MiddleRight);
+        var trialText = CreateText("TrialText", bottomBar.transform, "第 0 / 30 隻", 36, TEXT_WHITE, TextAnchor.MiddleRight);
+        trialText.GetComponent<Text>().horizontalOverflow = HorizontalWrapMode.Overflow;
 
         // 地鼠網格區域
         var moleGridContainer = CreateUIElement("MoleGridContainer", gamePanel.transform);
@@ -180,6 +183,16 @@ public static class SceneBuilder
             so.FindProperty("moleImage").objectReferenceValue = moleImg;
             so.ApplyModifiedProperties();
         }
+
+        // 倒數文字（畫面正中央，預設隱藏）
+        var countdownGO = CreateText("CountdownText", gamePanel.transform, "3", 120, TEXT_YELLOW, TextAnchor.MiddleCenter);
+        SetAnchored(countdownGO, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(200, 200));
+        var countdownTextComp = countdownGO.GetComponent<Text>();
+        countdownTextComp.fontStyle = FontStyle.Bold;
+        countdownTextComp.horizontalOverflow = HorizontalWrapMode.Overflow;
+        countdownTextComp.verticalOverflow = VerticalWrapMode.Overflow;
+        countdownTextComp.raycastTarget = false;
+        countdownGO.SetActive(false);
 
         // ===== Result Panel =====
         var resultPanel = CreatePanel("ResultPanel", canvasGO.transform, PANEL_BG);
@@ -236,20 +249,22 @@ public static class SceneBuilder
 
         // ===== 建立管理器物件 =====
         var managerGO = new GameObject("GoNoGoManager");
-        managerGO.AddComponent<GoNoGoManager>();
+        var manager = managerGO.AddComponent<GoNoGoManager>();
+
+        // 在同一個 GameObject 上掛載 4 個功能元件
+        var scoreMgr = managerGO.AddComponent<ScoreManager>();
+        var countdown = managerGO.AddComponent<CountdownTimer>();
+        var trialCtr = managerGO.AddComponent<TrialCounter>();
+        var rtRec = managerGO.AddComponent<ReactionTimeRecorder>();
+
         var spawnerGO = new GameObject("MoleSpawner");
-        spawnerGO.AddComponent<MoleSpawner>();
+        var spawner = spawnerGO.AddComponent<MoleSpawner>();
 
-        var manager = managerGO.GetComponent<GoNoGoManager>();
-        var spawner = spawnerGO.GetComponent<MoleSpawner>();
-
-
+        // ===== 連接 GoNoGoManager 的欄位 =====
         var managerSO = new SerializedObject(manager);
         managerSO.FindProperty("startPanel").objectReferenceValue = startPanel;
         managerSO.FindProperty("gamePanel").objectReferenceValue = gamePanel;
         managerSO.FindProperty("resultPanel").objectReferenceValue = resultPanel;
-        managerSO.FindProperty("scoreText").objectReferenceValue = scoreText.GetComponent<Text>();
-        managerSO.FindProperty("trialText").objectReferenceValue = trialText.GetComponent<Text>();
         managerSO.FindProperty("resultTotalScoreText").objectReferenceValue = totalScoreText.GetComponent<Text>();
         managerSO.FindProperty("resultGoAccuracyText").objectReferenceValue = goAccText.GetComponent<Text>();
         managerSO.FindProperty("resultNoGoAccuracyText").objectReferenceValue = noGoAccText.GetComponent<Text>();
@@ -260,6 +275,12 @@ public static class SceneBuilder
         managerSO.FindProperty("quitButtonResult").objectReferenceValue = quitBtnResult.GetComponent<Button>();
         managerSO.FindProperty("moleSpawner").objectReferenceValue = spawner;
 
+        // 連接 4 個功能元件
+        managerSO.FindProperty("scoreManager").objectReferenceValue = scoreMgr;
+        managerSO.FindProperty("countdownTimer").objectReferenceValue = countdown;
+        managerSO.FindProperty("trialCounter").objectReferenceValue = trialCtr;
+        managerSO.FindProperty("rtRecorder").objectReferenceValue = rtRec;
+
         // 設定預設 Sprite
         if (goMoleSprite != null)
             managerSO.FindProperty("goMoleSprite").objectReferenceValue = goMoleSprite;
@@ -267,7 +288,30 @@ public static class SceneBuilder
         if (noGoSprite != null)
             managerSO.FindProperty("noGoMoleSprite").objectReferenceValue = noGoSprite;
 
+        // 設定被打中回饋 Sprite
+        var goHitSprite = AssetDatabase.LoadAssetAtPath<Sprite>("Assets/Art/GoNoGo/GoMoleHit.png");
+        if (goHitSprite != null)
+            managerSO.FindProperty("goMoleHitSprite").objectReferenceValue = goHitSprite;
+        var noGoHitSprite = AssetDatabase.LoadAssetAtPath<Sprite>("Assets/Art/GoNoGo/NoGoMoleHit.png");
+        if (noGoHitSprite != null)
+            managerSO.FindProperty("noGoMoleHitSprite").objectReferenceValue = noGoHitSprite;
+
         managerSO.ApplyModifiedProperties();
+
+        // ===== 連接 ScoreManager 的 UI 欄位 =====
+        var scoreSO = new SerializedObject(scoreMgr);
+        scoreSO.FindProperty("scoreText").objectReferenceValue = scoreText.GetComponent<Text>();
+        scoreSO.ApplyModifiedProperties();
+
+        // ===== 連接 CountdownTimer 的 UI 欄位 =====
+        var countdownSO = new SerializedObject(countdown);
+        countdownSO.FindProperty("countdownText").objectReferenceValue = countdownGO.GetComponent<Text>();
+        countdownSO.ApplyModifiedProperties();
+
+        // ===== 連接 TrialCounter 的 UI 欄位 =====
+        var trialSO = new SerializedObject(trialCtr);
+        trialSO.FindProperty("trialText").objectReferenceValue = trialText.GetComponent<Text>();
+        trialSO.ApplyModifiedProperties();
 
         // ===== 連接 MoleSpawner =====
         var spawnerSO = new SerializedObject(spawner);
@@ -334,9 +378,10 @@ public static class SceneBuilder
         colors.pressedColor = bgColor * 0.8f;
         btn.colors = colors;
 
-        // 按鈕文字
+        // 按鈕文字（關閉 raycastTarget 避免攔截按鈕點擊）
         var textGO = CreateText("Text", go.transform, label, fontSize, TEXT_WHITE, TextAnchor.MiddleCenter);
         StretchFull(textGO);
+        textGO.GetComponent<Text>().raycastTarget = false;
 
         return go;
     }

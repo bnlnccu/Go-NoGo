@@ -1,11 +1,11 @@
 using UnityEngine;
 using UnityEngine.UI;
-using System.Collections.Generic;
 
 /// <summary>
 /// Go/No-Go 打地鼠遊戲主控制器。
-/// 管理遊戲流程、計分、反應時間記錄與結算。
-/// 所有可調參數皆透過 Inspector 面板暴露，學生不需修改任何程式碼。
+/// 管理遊戲流程與結算，計分、倒數、計次、反應時間則委託給各功能元件。
+///
+/// 學生可在 Inspector 調整遊戲參數，並透過功能元件提供的 API 來擴充遊戲邏輯。
 /// </summary>
 public class GoNoGoManager : MonoBehaviour
 {
@@ -29,11 +29,6 @@ public class GoNoGoManager : MonoBehaviour
     [Range(0.3f, 3.0f)]
     [SerializeField] private float spawnInterval = 1.0f;
 
-    [Tooltip("總共會出現幾隻地鼠（試驗次數）。\n" +
-             "認知意義：試驗次數影響數據的統計信度。")]
-    [Range(10, 100)]
-    [SerializeField] private int totalTrials = 30;
-
     [Header("===== 地鼠外觀（可拖拽替換圖片）=====")]
 
     [Tooltip("Go 地鼠的圖片（應該敲的地鼠）。\n留空則使用預設棕色圓形。")]
@@ -41,6 +36,12 @@ public class GoNoGoManager : MonoBehaviour
 
     [Tooltip("No-Go 地鼠的圖片（不應該敲的地鼠）。\n留空則使用預設紅色圓形。")]
     [SerializeField] private Sprite noGoMoleSprite;
+
+    [Tooltip("Go 地鼠被正確敲中後顯示的圖片。\n留空則使用預設暈眩圖。")]
+    [SerializeField] private Sprite goMoleHitSprite;
+
+    [Tooltip("No-Go 地鼠被錯誤敲擊後顯示的圖片。\n留空則使用預設生氣圖。")]
+    [SerializeField] private Sprite noGoMoleHitSprite;
 
     [Header("===== 計分設定 =====")]
 
@@ -60,6 +61,22 @@ public class GoNoGoManager : MonoBehaviour
     [Range(0, 10)]
     [SerializeField] private int goMissPenalty = 5;
 
+    // ========== 功能元件（拖入場景中的元件）==========
+
+    [Header("===== 功能元件（自動連接）=====")]
+
+    [Tooltip("計分管理器")]
+    [SerializeField] private ScoreManager scoreManager;
+
+    [Tooltip("倒數計時器")]
+    [SerializeField] private CountdownTimer countdownTimer;
+
+    [Tooltip("試驗計數器")]
+    [SerializeField] private TrialCounter trialCounter;
+
+    [Tooltip("反應時間紀錄器")]
+    [SerializeField] private ReactionTimeRecorder rtRecorder;
+
     // ========== UI 參考（場景中連接）==========
 
     [Header("===== UI 參考（請勿修改）=====")]
@@ -67,9 +84,6 @@ public class GoNoGoManager : MonoBehaviour
     [SerializeField] private GameObject startPanel;
     [SerializeField] private GameObject gamePanel;
     [SerializeField] private GameObject resultPanel;
-
-    [SerializeField] private Text scoreText;
-    [SerializeField] private Text trialText;
 
     [SerializeField] private Text resultTotalScoreText;
     [SerializeField] private Text resultGoAccuracyText;
@@ -85,15 +99,10 @@ public class GoNoGoManager : MonoBehaviour
 
     // ========== 內部狀態 ==========
 
-    private int currentScore;
-    private int currentTrial;
     private int goTrials;
     private int goHits;
-    private int goMisses;
     private int noGoTrials;
     private int noGoCorrectInhibitions;
-    private int noGoFails;
-    private List<float> goReactionTimes = new List<float>();
     private bool gameRunning;
 
     // ========== 公開屬性（供其他腳本讀取）==========
@@ -101,11 +110,14 @@ public class GoNoGoManager : MonoBehaviour
     public float TargetDisplayDuration => targetDisplayDuration;
     public float NoGoRatio => noGoRatio;
     public float SpawnInterval => spawnInterval;
-    public int TotalTrials => totalTrials;
     public Sprite GoMoleSprite => goMoleSprite;
     public Sprite NoGoMoleSprite => noGoMoleSprite;
+    public Sprite GoMoleHitSprite => goMoleHitSprite;
+    public Sprite NoGoMoleHitSprite => noGoMoleHitSprite;
     public bool IsGameRunning => gameRunning;
-    public bool HasTrialsRemaining => currentTrial < totalTrials;
+
+    /// <summary>是否還有剩餘回合（委託給 TrialCounter）</summary>
+    public bool HasTrialsRemaining => trialCounter != null ? trialCounter.HasRemaining : true;
 
     // ========== 生命週期 ==========
 
@@ -116,6 +128,10 @@ public class GoNoGoManager : MonoBehaviour
             goMoleSprite = CreateDefaultSprite(new Color(0.6f, 0.4f, 0.2f));
         if (noGoMoleSprite == null)
             noGoMoleSprite = CreateDefaultSprite(new Color(0.85f, 0.2f, 0.2f));
+        if (goMoleHitSprite == null)
+            goMoleHitSprite = CreateDefaultHitSprite(new Color(0.5f, 0.35f, 0.15f), false);
+        if (noGoMoleHitSprite == null)
+            noGoMoleHitSprite = CreateDefaultHitSprite(new Color(0.7f, 0.15f, 0.15f), true);
 
         // 初始化 UI
         ShowPanel(PanelType.Start);
@@ -143,22 +159,33 @@ public class GoNoGoManager : MonoBehaviour
     public void StartGame()
     {
         // 重置所有數據
-        currentScore = 0;
-        currentTrial = 0;
         goTrials = 0;
         goHits = 0;
-        goMisses = 0;
         noGoTrials = 0;
         noGoCorrectInhibitions = 0;
-        noGoFails = 0;
-        goReactionTimes.Clear();
-        gameRunning = true;
 
-        UpdateScoreUI();
-        UpdateTrialUI();
+        // 重置功能元件
+        if (scoreManager != null) scoreManager.ResetScore();
+        if (trialCounter != null) trialCounter.ResetTrials();
+        if (rtRecorder != null) rtRecorder.ClearRecords();
+
         ShowPanel(PanelType.Game);
 
-        // 開始生成地鼠
+        // 使用倒數計時器開始倒數
+        if (countdownTimer != null)
+        {
+            countdownTimer.StartCountdown(OnCountdownFinished);
+        }
+        else
+        {
+            // 沒有倒數計時器，直接開始
+            OnCountdownFinished();
+        }
+    }
+
+    private void OnCountdownFinished()
+    {
+        gameRunning = true;
         if (moleSpawner != null)
             moleSpawner.StartSpawning();
     }
@@ -193,16 +220,16 @@ public class GoNoGoManager : MonoBehaviour
     /// <summary>當一個新 trial 開始</summary>
     public void OnTrialStarted(bool isNoGo)
     {
-        currentTrial++;
+        if (trialCounter != null)
+            trialCounter.NextTrial();
+
         if (isNoGo)
             noGoTrials++;
         else
             goTrials++;
 
-        UpdateTrialUI();
-
         // 如果已達到總試驗數，停止生成新的（等待當前地鼠消失後結算）
-        if (currentTrial >= totalTrials)
+        if (trialCounter != null && !trialCounter.HasRemaining)
         {
             if (moleSpawner != null)
                 moleSpawner.StopSpawning();
@@ -216,62 +243,38 @@ public class GoNoGoManager : MonoBehaviour
     public void OnGoClicked(float reactionTimeMs)
     {
         goHits++;
-        currentScore += goHitScore;
-        goReactionTimes.Add(reactionTimeMs);
-        UpdateScoreUI();
+        if (scoreManager != null) scoreManager.AddScore(goHitScore);
+        if (rtRecorder != null) rtRecorder.RecordTime(reactionTimeMs);
     }
 
     /// <summary>Go 地鼠超時未被點擊（漏敲）</summary>
     public void OnMoleMissed()
     {
-        goMisses++;
-        currentScore = Mathf.Max(0, currentScore - goMissPenalty);
-        UpdateScoreUI();
+        if (scoreManager != null) scoreManager.SubtractScore(goMissPenalty);
     }
 
     /// <summary>玩家錯誤敲擊了 No-Go 地鼠（衝動錯誤）</summary>
     public void OnNoGoClicked(float reactionTimeMs)
     {
-        noGoFails++;
-        currentScore = Mathf.Max(0, currentScore - noGoFailPenalty);
-        UpdateScoreUI();
+        if (scoreManager != null) scoreManager.SubtractScore(noGoFailPenalty);
     }
 
     /// <summary>No-Go 地鼠正確地未被點擊（成功抑制）</summary>
     public void OnNoGoCorrectInhibition()
     {
         noGoCorrectInhibitions++;
-        currentScore += noGoInhibitScore;
-        UpdateScoreUI();
+        if (scoreManager != null) scoreManager.AddScore(noGoInhibitScore);
     }
 
     // ========== UI 更新 ==========
-
-    private void UpdateScoreUI()
-    {
-        if (scoreText != null)
-            scoreText.text = "分數：" + currentScore;
-    }
-
-    private void UpdateTrialUI()
-    {
-        if (trialText != null)
-            trialText.text = string.Format("第 {0} / {1} 隻", currentTrial, totalTrials);
-    }
 
     private void ShowResults()
     {
         float goAccuracy = goTrials > 0 ? (float)goHits / goTrials * 100f : 0f;
         float noGoAccuracy = noGoTrials > 0 ? (float)noGoCorrectInhibitions / noGoTrials * 100f : 0f;
 
-        float avgRT = 0f;
-        if (goReactionTimes.Count > 0)
-        {
-            float total = 0f;
-            foreach (float rt in goReactionTimes)
-                total += rt;
-            avgRT = total / goReactionTimes.Count;
-        }
+        float avgRT = rtRecorder != null ? rtRecorder.GetAverageMs() : 0f;
+        int currentScore = scoreManager != null ? scoreManager.CurrentScore : 0;
 
         if (resultTotalScoreText != null)
             resultTotalScoreText.text = "總分：" + currentScore;
@@ -316,6 +319,70 @@ public class GoNoGoManager : MonoBehaviour
                 {
                     tex.SetPixel(x, y, transparent);
                 }
+            }
+        }
+
+        tex.Apply();
+        tex.filterMode = FilterMode.Bilinear;
+        return Sprite.Create(tex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f), 100);
+    }
+
+    /// <summary>
+    /// 生成被打中的預設 Sprite（扁橢圓 + 標記，與一般地鼠有明顯視覺差異）
+    /// </summary>
+    private Sprite CreateDefaultHitSprite(Color color, bool isAngry)
+    {
+        int size = 64;
+        Texture2D tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
+        float cx = size / 2f;
+        float cy = size / 2f;
+        Color transparent = new Color(0, 0, 0, 0);
+
+        // 扁橢圓（被打扁的效果）
+        float rx = size / 2f - 1;
+        float ry = size / 4f;
+
+        for (int y = 0; y < size; y++)
+        {
+            for (int x = 0; x < size; x++)
+            {
+                float dx = (x - cx) / rx;
+                float dy = (y - cy) / ry;
+                if (dx * dx + dy * dy <= 1f)
+                {
+                    tex.SetPixel(x, y, color);
+                }
+                else
+                {
+                    tex.SetPixel(x, y, transparent);
+                }
+            }
+        }
+
+        // 畫 X 標記（暈眩眼）或 ! 標記（生氣）
+        Color markColor = isAngry ? Color.yellow : Color.white;
+        int markSize = size / 6;
+        for (int i = -markSize; i <= markSize; i++)
+        {
+            for (int t = -1; t <= 1; t++)
+            {
+                // 左眼 X
+                int lx = (int)(cx - size * 0.18f) + i;
+                int ly1 = (int)(cy + size * 0.05f) + i + t;
+                int ly2 = (int)(cy + size * 0.05f) - i + t;
+                if (lx >= 0 && lx < size && ly1 >= 0 && ly1 < size)
+                    tex.SetPixel(lx, ly1, markColor);
+                if (lx >= 0 && lx < size && ly2 >= 0 && ly2 < size)
+                    tex.SetPixel(lx, ly2, markColor);
+
+                // 右眼 X
+                int rxx = (int)(cx + size * 0.18f) + i;
+                int ry1 = (int)(cy + size * 0.05f) + i + t;
+                int ry2 = (int)(cy + size * 0.05f) - i + t;
+                if (rxx >= 0 && rxx < size && ry1 >= 0 && ry1 < size)
+                    tex.SetPixel(rxx, ry1, markColor);
+                if (rxx >= 0 && rxx < size && ry2 >= 0 && ry2 < size)
+                    tex.SetPixel(rxx, ry2, markColor);
             }
         }
 

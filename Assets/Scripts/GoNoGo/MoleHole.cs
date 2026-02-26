@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.UI;
+using System.Collections;
 
 /// <summary>
 /// 洞口元件：管理單個洞口的狀態（是否有地鼠佔用）。
@@ -59,5 +60,23 @@ public class MoleHole : MonoBehaviour
 
         if (moleImage != null)
             moleImage.gameObject.SetActive(false);
+    }
+
+    /// <summary>
+    /// 洞口短暫閃爍指定顏色（正確閃綠、錯誤閃紅）
+    /// </summary>
+    public void FlashColor(Color flashColor, float duration = 0.3f)
+    {
+        StartCoroutine(FlashCoroutine(flashColor, duration));
+    }
+
+    private IEnumerator FlashCoroutine(Color flashColor, float duration)
+    {
+        if (holeImage == null) yield break;
+
+        Color originalColor = holeImage.color;
+        holeImage.color = flashColor;
+        yield return new WaitForSeconds(duration);
+        holeImage.color = originalColor;
     }
 }

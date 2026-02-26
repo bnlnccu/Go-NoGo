@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
+using System.Collections;
 
 /// <summary>
 /// 單隻地鼠的行為：冒出、停留、縮回、點擊偵測。
@@ -83,22 +84,19 @@ public class Mole : MonoBehaviour, IPointerClickHandler
             return;
         }
 
-        // 停留計時 → 超時自動縮回
-        if (Time.time - spawnTime >= displayDuration)
+        // 停留計時 → 超時自動縮回（僅限未被點擊的情況）
+        // 已被點擊的地鼠由 HitFeedbackCoroutine 控制縮回時機
+        if (Time.time - spawnTime >= displayDuration && !wasClicked)
         {
-            // 沒被點擊就消失
-            if (!wasClicked)
+            if (!isNoGo)
             {
-                if (!isNoGo)
-                {
-                    // Go 地鼠沒被敲 → miss
-                    manager.OnMoleMissed();
-                }
-                else
-                {
-                    // No-Go 地鼠沒被點 → 正確抑制
-                    manager.OnNoGoCorrectInhibition();
-                }
+                // Go 地鼠沒被敲 → miss
+                manager.OnMoleMissed();
+            }
+            else
+            {
+                // No-Go 地鼠沒被點 → 正確抑制
+                manager.OnNoGoCorrectInhibition();
             }
             StartHideAnimation();
         }
@@ -121,6 +119,33 @@ public class Mole : MonoBehaviour, IPointerClickHandler
             // 點了 Go 地鼠 → 正確
             manager.OnGoClicked(reactionTime);
         }
+
+        // 視覺回饋：換圖 + 洞口閃爍 + 延遲縮回
+        StartCoroutine(HitFeedbackCoroutine());
+    }
+
+    private IEnumerator HitFeedbackCoroutine()
+    {
+        // 換圖
+        var image = GetComponent<Image>();
+        if (image != null && manager != null)
+        {
+            Sprite hitSprite = isNoGo ? manager.NoGoMoleHitSprite : manager.GoMoleHitSprite;
+            if (hitSprite != null)
+                image.sprite = hitSprite;
+        }
+
+        // 洞口閃爍
+        if (parentHole != null)
+        {
+            Color flashColor = isNoGo
+                ? new Color(0.9f, 0.2f, 0.2f, 0.8f)   // 錯誤：紅色
+                : new Color(0.2f, 0.9f, 0.3f, 0.8f);   // 正確：綠色
+            parentHole.FlashColor(flashColor, 0.3f);
+        }
+
+        // 延遲 0.3 秒讓玩家看到回饋
+        yield return new WaitForSeconds(0.3f);
 
         StartHideAnimation();
     }
